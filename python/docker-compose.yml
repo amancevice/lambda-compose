@@ -12,7 +12,7 @@ services:
     working_dir: /tmp/build
 
   # Package lambda/layer
-  package:
+  dist:
     entrypoint: zip -r - .
     image: lambci/lambda:build-python3.7
     volumes:
@@ -26,6 +26,15 @@ services:
     volumes:
       - lambda:/var/task
       - layer:/opt/python
+
+  # Develop function
+  dev:
+    command: /bin/bash
+    env_file: .env
+    image: lambci/lambda:build-python3.7
+    volumes:
+      - layer:/opt/python
+      - ./:/var/task
 
 volumes:
   layer:

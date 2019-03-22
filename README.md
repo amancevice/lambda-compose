@@ -142,23 +142,24 @@ Update the Makefile with instructions on locking:
 
 ```Makefile
 # ./Makefile
+.PHONY: lock
+
 Pipfile.lock: Pipfile
 	pipenv lock
 	pipenv lock --requirements > requirements.txt
 	pipenv lock --requirements --dev > requirements-dev.txt
 
-lock: Pipfile.lock requirements.txt requirements-dev.txt
+lock: Pipfile.lock
 ```
 
 ### Build
 
-Now that we have fully locked requirements, we can define our build stage in our compose configuration. We will split the build process into two: one for building the dependencies and one for building the application:
+Now that we have fully locked requirements, we can define our build stage in our compose configuration:
 
 ```yaml
 # ./docker-compose.yml
 version: '3'
 services:
-  # (Lock stage omitted for brevity)
 
   # Build
   build:
@@ -179,7 +180,8 @@ Update the Makefile with instructions on building:
 
 ```Makefile
 # ./Makefile
-lock: # (omitted for brevity)
+
+# (lock tasks omitted for brevity)
 
 build:
   # Install the lambda code to /var/task (with no dependencies)
@@ -201,10 +203,10 @@ Add a packaging service that simply zips the working directory to stdout.
 version: '3'
 services:
 
-  # (Lock/Build stages omitted for brevity)
+  # (Build stage omitted for brevity)
 
   # Package
-  package:
+  dist:
     entrypoint: zip -r - .
     image: lambci/lambda:build-python3.7
     volumes:
@@ -212,69 +214,42 @@ services:
       - layer:/opt/python
 
 volumes:
-  lock:
   lambda:
   layer:
 ```
 
-Update the Makefile with instructions on packaging:
+Optionally, update the Makefile with instructions on packaging:
 
 ```Makefile
 # ./Makefile
-lock: # (omitted for brevity)
-build: # (omitted for brevity)
 
-package:
+# (lock/build tasks omitted for brevity)
+
+dist:
   mkdir -p dist
-  docker-compose run --rm -T package > dist/lambda.zip
-  docker-compose run --rm -T -w /opt package > dist/layer.zip
+  docker-compose run --rm -T dist > dist/lambda.zip
+  docker-compose run --rm -T -w /opt dist > dist/layer.zip
 ```
 
-Run `make package` to create your zip packages under `./dist`.
+Run `make dist` to create your zip packages under `./dist`.
 
 ### Deploy
 
 Not to be confused with deploying the Lambda, the deploy stage is used to upload your packages to S3.
 
-Add a deploy service to your compose configuration, being sure to include AWS credentials in the environment:
-
-```yaml
-# ./docker-compose.yml
-version: '3'
-services:
-
-  # (Lock/Build/Package stages omitted for brevity)
-
-  # Deploy lambda/layer to S3
-  deploy:
-    entrypoint: aws s3
-    environment:
-      AWS_ACCESS_KEY_ID:
-      AWS_SECRET_ACCESS_KEY:
-      AWS_DEFAULT_REGION:
-    image: lambci/lambda:build-python3.7
-    volumes:
-      - ./dist:/var/task
-
-volumes:
-  lock:
-  lambda:
-  layer:
-```
-
 Update the Makefile with instructions on deploying to S3:
 
 ```Makefile
 # ./Makefile
-lock: # (omitted for brevity)
-build: # (omitted for brevity)
-package: # (omitted for brevity)
+
+# (lock/build/dist tasks omitted for brevity)
 
 deploy:
-  docker-compose run --rm deploy sync . s3://my-bucket/path/to/prefix/
+	docker-compose run --rm -T package | aws s3 cp - s3://my-bucket/path/to/prefix/lambda.zip
+	docker-compose run --rm -T -w /opt package | aws s3 cp - s3://my-bucket/path/to/prefix/layer.zip
 ```
 
-Run `make deploy` to send your zip packages to S3.
+Run `make deploy` to stream your zipped packages directly to S3.
 
 ### Test
 
@@ -294,7 +269,7 @@ In order to test your application in a Lambda-like runtime, add a test configura
 version: '3'
 services:
 
-  # (Lock/Build/Package/Deploy stages omitted for brevity)
+  # (Build/Package stages omitted for brevity)
 
   # Test function
   test:
@@ -305,7 +280,6 @@ services:
       - layer:/opt/python
 
 volumes:
-  lock:
   lambda:
   layer:
 ```
@@ -314,31 +288,52 @@ Update the Makefile with instructions on running the application:
 
 ```Makefile
 # ./Makefile
-lock: # (omitted for brevity)
-build: # (omitted for brevity)
-package: # (omitted for brevity)
-deploy: # (omitted for brevity)
+
+# (lock/build/dist tasks omitted for brevity)
 
 test:
-  docker-compose run --rm test my_lambda_function.index.handler '{}'
+  docker-compose run --rm test my_lambda_function.index.handler '{"your":"event"}'
 ```
 
 Run `make test` to see your application in action!
 
 ### Clean
 
-Finally, update your Makefile to clean your environment:
+Update your Makefile with a task to clean your environment:
 
 ```Makefile
 # ./Makefile
-lock: # (omitted for brevity)
-build: # (omitted for brevity)
-package: # (omitted for brevity)
-deploy: # (omitted for brevity)
-test: # (omitted for brevity)
+
+# (lock/build/dist/test tasks omitted for brevity)
 
 clean:
+  rm -rf dist
   docker-compose down --volumes
 ```
 
-Run `make clean` to remove any networks, containers, and volumes from your system.
+Run `make clean` to remove any containers, networks, and volumes from your system.
+
+### Dev
+
+Add a dev section to your compose configuration to develop inside a container:
+
+```yaml
+# ./docker-compose.yml
+version: '3'
+services:
+
+  # (Build/Package/Test stages omitted for brevity)
+
+  # Develop function
+  test:
+    command: /bin/bash
+    env_file: .env
+    image: lambci/lambda:build-python3.7
+    volumes:
+      - layer:/opt/python
+      - ./:/var/task
+
+volumes:
+  lambda:
+  layer:
+```
