@@ -4,5 +4,6 @@ setup(
     name='my-lambda-function',
     packages=['my_lambda_function'],
     setup_requires=['setuptools_scm'],
-    use_scm_version=True,
+    # use_scm_version=True,
+    version='0.1.0',
 )

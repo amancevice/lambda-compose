@@ -1,21 +1,9 @@
 version: '3'
 services:
 
-  # Lock dependencies
-  lock:
-    entrypoint: pipenv lock
-    env_file: .env
-    environment:
-      WORKON_HOME: /var/lock
-    image: lambci/lambda:build-python3.7
-    volumes:
-      - lock:/var/lock
-      - ./:/tmp/task
-
   # Build lambda/layer
   build:
     entrypoint: pip install
-    env_file: .env
     image: lambci/lambda:build-python3.7
     volumes:
       - lambda:/var/task
@@ -26,19 +14,10 @@ services:
   # Package lambda/layer
   package:
     entrypoint: zip -r - .
-    env_file: .env
     image: lambci/lambda:build-python3.7
     volumes:
       - lambda:/var/task
       - layer:/opt/python
-
-  # Deploy lambda/layer to S3
-  deploy:
-    entrypoint: aws s3
-    env_file: .env
-    image: lambci/lambda:build-python3.7
-    volumes:
-      - ./dist:/var/task
 
   # Test function
   test:
@@ -51,4 +30,3 @@ services:
 volumes:
   layer:
   lambda:
-  lock:

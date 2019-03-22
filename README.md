@@ -8,6 +8,20 @@ Lambda is a component of the _serverless_ toolkit that allows execution of code 
 
 Developing for Lambda can be a challenge because the Lambda runtime is a walled-garden. Using docker compose, docker volumes, and the `lambci/lambda` images this process can be significantly streamlined.
 
+## Requirements
+
+All runtimes
+- [Docker](https://docs.docker.com/install/)
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html) (optional)
+
+Python runtimes
+- [Python](https://www.python.org)
+- [Pipenv](https://pipenv.readthedocs.io/en/latest/#install-pipenv-today) (optional)
+
+NodeJS runtimes
+- [node](https://nodejs.org/)
+- [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
+
 ## Development Stages
 
 The development process can be broken down into six stages:
@@ -17,12 +31,16 @@ The development process can be broken down into six stages:
 - **Deploy** where the application's package(s) are persisted on S3
 - **Test** where the application is tested in an environment that nearly replicates the Lambda runtime
 
+## Python Runtime
+
+How to set up your workspace for developing Python Lambdas.
+
 ### Setup
 
-Let's begin by creating four files for a simple Python project:
+Let's begin by creating a simple Python project:
 
 ```
-/
+/python
 ├─┬ my_lambda_function/
 │ ├── __init__.py
 │ └── index.py
@@ -33,19 +51,14 @@ Let's begin by creating four files for a simple Python project:
 ```
 
 `my_lambda_function` will contain the Python project.
-`.env` will contain environmental variables that might be needed for a stage. This file may contain sensitive information so it's important to remember to omit from source control.
-`docker-compose.yml` will define our development step.
+
+`.env` will contain environmental variables that might be needed for the application. This file may contain sensitive information so it's important to remember to omit from source control.
+
+`docker-compose.yml` will define our development steps.
+
 `Makefile` will assemble docker-compose steps into stages.
+
 `setup.py` will help define our application package.
-
-Add your AWS keys to `.env` as well as any other environment variables your application might require.
-
-```bash
-# ./.env
-AWS_ACCESS_KEY_ID=<aws-access-key-id>
-AWS_SECRET_ACCESS_KEY=<aws-secret-access-key>
-AWS_DEFAULT_REGION=us-east-1
-```
 
 A simple `setup.py` might look like this:
 
@@ -62,40 +75,9 @@ setup(
 
 ### Lock
 
-Inside our docker-compose configuration we will define a `lock` service and volume:
+"Locking" in this context is the process of determining the full dependency graph of the project. How this is done is left to the user, but Pipenv is a solid (if controversial) choice.
 
-```yaml
-# ./docker-compose.yml
-version: '3'
-services:
-
-  # Lock dependencies
-  lock:
-    entrypoint: pipenv lock
-    environment:
-      WORKON_HOME: /var/lock
-    image: lambci/lambda:build-python3.7
-    volumes:
-      - lock:/var/lock
-      - ./:/tmp/task
-
-volumes:
-  lock:
-```
-
-We will use the built-in installation of pipenv to manage our dependencies. By defining `WORKON_HOME` to be the mounted location of the `lock` volume we can re-use the pipenv virtual environment for subsequent runs.
-
-Update the Makefile with instructions on locking:
-
-```Makefile
-# ./Makefile
-lock:
-  docker-compose run --rm lock
-  docker-compose run --rm lock -r > requirements.txt
-  docker-compose run --rm lock -r -d > requirements-dev.txt
-```
-
-Run `make lock` to generate a `Pipefile`, `Pipfile.lock`, `requirements.txt`, and `requirements-dev.txt`:
+Begin the process of locking by executing `pipenv lock` at the root of your project. This will create a virtual environment to compute the dependency tree and create two new files in your project:
 
 ```
   /
@@ -107,20 +89,20 @@ Run `make lock` to generate a `Pipefile`, `Pipfile.lock`, `requirements.txt`, an
   ├── Makefile
 * ├── Pipfile
 * ├── Pipfile.lock
-* ├── requirements.txt
-* ├── requirements-dev.txt
   └── setup.py
 ```
 
-Let's assume our project will depend on the `pandas` and `requests` libraries. Update the `Pipfile` to require them:
+Let's assume our project will depend on the `pandas` and `requests` libraries. Optionally, include `boto3` in your dev requirements. Update the `Pipfile` to require them:
 
 ```toml
+# ./Pipfile
 [[source]]
 name = "pypi"
 url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
+boto3 = "*"
 
 [packages]
 pandas = ">=0.24"
@@ -130,9 +112,43 @@ requests = ">=2.21"
 python_version = "3.7"
 ```
 
-Run `make lock` again to lock this new dependency and update `Pipfile.lock` and `requirements.txt`.
+Run `pipenv lock` again to regenerate `Pipefile.lock`.
 
-Any time additional dependencies are added to `Pipfile`, re-run `make lock` to lock the dependencies.
+Once the lock is complete, generate the requirements files:
+
+```bash
+pipenv lock --requirements > requirements.txt
+pipenv lock --requirements --dev > requirements-dev.txt
+```
+
+Your project should now look like the following:
+
+```
+  /
+  ├─┬ my_lambda_function/
+  │ ├── __init__.py
+  │ └── index.py
+  ├── .env
+  ├── docker-compose.yml
+  ├── Makefile
+  ├── Pipfile
+  ├── Pipfile.lock
+* ├── requirements.txt
+* ├── requirements-dev.txt
+  └── setup.py
+```
+
+Update the Makefile with instructions on locking:
+
+```Makefile
+# ./Makefile
+Pipfile.lock: Pipfile
+	pipenv lock
+	pipenv lock --requirements > requirements.txt
+	pipenv lock --requirements --dev > requirements-dev.txt
+
+lock: Pipfile.lock requirements.txt requirements-dev.txt
+```
 
 ### Build
 
@@ -155,7 +171,6 @@ services:
     working_dir: /tmp/build
 
 volumes:
-  lock:
   lambda:
   layer:
 ```
@@ -262,6 +277,15 @@ deploy:
 Run `make deploy` to send your zip packages to S3.
 
 ### Test
+
+Add your AWS keys to `.env` as well as any other environment variables your application might require.
+
+```bash
+# ./.env
+AWS_ACCESS_KEY_ID=<aws-access-key-id>
+AWS_SECRET_ACCESS_KEY=<aws-secret-access-key>
+AWS_DEFAULT_REGION=us-east-1
+```
 
 In order to test your application in a Lambda-like runtime, add a test configuration to compose:
 
