@@ -14,11 +14,11 @@ All runtimes
 - [Docker](https://docs.docker.com/install/)
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html) (optional)
 
-Python runtimes
+Python Runtime
 - [Python](https://www.python.org)
 - [Pipenv](https://pipenv.readthedocs.io/en/latest/#install-pipenv-today) (optional)
 
-NodeJS runtimes
+NodeJS Runtime
 - [node](https://nodejs.org/)
 - [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
 
@@ -31,11 +31,11 @@ The development process can be broken down into six stages:
 - **Deploy** where the application's package(s) are persisted on S3
 - **Test** where the application is tested in an environment that nearly replicates the Lambda runtime
 
-## Python Runtime
+# Python Runtime
 
 How to set up your workspace for developing Python Lambdas.
 
-### Setup
+## Setup
 
 Let's begin by creating a simple Python project:
 
@@ -70,17 +70,21 @@ setup(
     name='my-lambda-function',
     packages=['my_lambda_function'],
     version='0.1.0',
+    # Or, using `setuptools_scm`
+    # setup_requires=['setuptools_scm'],
+    # use_scm_version=True,
 )
+
 ```
 
-### Lock
+## Lock
 
 "Locking" in this context is the process of determining the full dependency graph of the project. How this is done is left to the user, but Pipenv is a solid (if controversial) choice.
 
 Begin the process of locking by executing `pipenv lock` at the root of your project. This will create a virtual environment to compute the dependency tree and create two new files in your project:
 
 ```
-  /
+  /python
   ├─┬ my_lambda_function/
   │ ├── __init__.py
   │ └── index.py
@@ -124,7 +128,7 @@ pipenv lock --requirements --dev > requirements-dev.txt
 Your project should now look like the following:
 
 ```
-  /
+  /python
   ├─┬ my_lambda_function/
   │ ├── __init__.py
   │ └── index.py
@@ -152,7 +156,7 @@ Pipfile.lock: Pipfile
 lock: Pipfile.lock
 ```
 
-### Build
+## Build
 
 Now that we have fully locked requirements, we can define our build stage in our compose configuration:
 
@@ -168,8 +172,8 @@ services:
     volumes:
       - lambda:/var/task
       - layer:/opt/python
-      - ./:/tmp/build
-    working_dir: /tmp/build
+      - ./:/tmp
+    working_dir: /tmp
 
 volumes:
   lambda:
@@ -184,17 +188,17 @@ Update the Makefile with instructions on building:
 # (lock tasks omitted for brevity)
 
 build:
-  # Install the lambda code to /var/task (with no dependencies)
-  docker-compose run --rm build -t /var/task --no-deps .
-  # Install the dependency layer to /opt/python
-  docker-compose run --rm build -t /opt/python -r requirements.txt
+	# Install the lambda code to /var/task (with no dependencies)
+	docker-compose run --rm build --target /var/task --no-deps .
+	# Install the dependency layer to /opt/python
+	docker-compose run --rm build --target /opt/python --requirement requirements.txt
 ```
 
 Run `make build` to install your application to the `lambda` and `layer` volumes.
 
 _Note: Splitting the application and layer in this manner is not required, but it's a handy way to separate your application logic from its core dependencies. Assuming your application codebase is small, updating your Lambda function becomes fairly trivial._
 
-### Package
+## Package
 
 Add a packaging service that simply zips the working directory to stdout.
 
@@ -226,14 +230,14 @@ Optionally, update the Makefile with instructions on packaging:
 # (lock/build tasks omitted for brevity)
 
 dist:
-  mkdir -p dist
-  docker-compose run --rm -T dist > dist/lambda.zip
-  docker-compose run --rm -T -w /opt dist > dist/layer.zip
+	mkdir -p dist
+	docker-compose run --rm -T dist > dist/lambda.zip
+	docker-compose run --rm -T --workdir /opt dist > dist/layer.zip
 ```
 
 Run `make dist` to create your zip packages under `./dist`.
 
-### Deploy
+## Deploy
 
 Not to be confused with deploying the Lambda, the deploy stage is used to upload your packages to S3.
 
@@ -246,12 +250,12 @@ Update the Makefile with instructions on deploying to S3:
 
 deploy:
 	docker-compose run --rm -T package | aws s3 cp - s3://my-bucket/path/to/prefix/lambda.zip
-	docker-compose run --rm -T -w /opt package | aws s3 cp - s3://my-bucket/path/to/prefix/layer.zip
+	docker-compose run --rm -T --workdir /opt package | aws s3 cp - s3://my-bucket/path/to/prefix/layer.zip
 ```
 
 Run `make deploy` to stream your zipped packages directly to S3.
 
-### Test
+## Test
 
 Add your AWS keys to `.env` as well as any other environment variables your application might require.
 
@@ -284,36 +288,9 @@ volumes:
   layer:
 ```
 
-Update the Makefile with instructions on running the application:
+Run `docker-compose run --rm test path.to.handler '{"example":"payload"}'` to see your application in action!
 
-```Makefile
-# ./Makefile
-
-# (lock/build/dist tasks omitted for brevity)
-
-test:
-  docker-compose run --rm test my_lambda_function.index.handler '{"your":"event"}'
-```
-
-Run `make test` to see your application in action!
-
-### Clean
-
-Update your Makefile with a task to clean your environment:
-
-```Makefile
-# ./Makefile
-
-# (lock/build/dist/test tasks omitted for brevity)
-
-clean:
-  rm -rf dist
-  docker-compose down --volumes
-```
-
-Run `make clean` to remove any containers, networks, and volumes from your system.
-
-### Dev
+## Dev
 
 Add a dev section to your compose configuration to develop inside a container:
 
@@ -325,7 +302,7 @@ services:
   # (Build/Package/Test stages omitted for brevity)
 
   # Develop function
-  test:
+  dev:
     command: /bin/bash
     env_file: .env
     image: lambci/lambda:build-python3.7
@@ -336,4 +313,100 @@ services:
 volumes:
   lambda:
   layer:
+```
+
+Run `docker-compose run --rm dev` to enter an interactive shell that closely resembles Lambda.
+
+## Clean
+
+Update your Makefile with a task to clean your environment:
+
+```Makefile
+# ./Makefile
+
+# (lock/build/dist/test tasks omitted for brevity)
+
+clean:
+	rm -rf dist
+	docker-compose down --volumes
+```
+
+Run `make clean` to remove any containers, networks, and volumes from your system.
+
+## Full Configuration
+
+A complete compose configuration for reference:
+
+```yaml
+version: '3'
+services:
+
+  # Build lambda/layer
+  build:
+    entrypoint: pip install
+    image: lambci/lambda:build-python3.7
+    volumes:
+      - lambda:/var/task
+      - layer:/opt/python
+      - ./:/tmp
+    working_dir: /tmp
+
+  # Package lambda/layer
+  dist:
+    entrypoint: zip -r - .
+    image: lambci/lambda:build-python3.7
+    volumes:
+      - lambda:/var/task
+      - layer:/opt/python
+
+  # Test function
+  test:
+    env_file: .env
+    image: lambci/lambda:python3.7
+    volumes:
+      - lambda:/var/task
+      - layer:/opt/python
+
+  # Develop function
+  dev:
+    command: /bin/bash
+    env_file: .env
+    image: lambci/lambda:build-python3.7
+    volumes:
+      - layer:/opt/python
+      - ./:/var/task
+
+volumes:
+  lambda:
+  layer:
+```
+
+A complete Makefile for reference:
+
+```Makefile
+.PHONY: lock build deploy
+
+Pipfile.lock: Pipfile
+	pipenv lock
+	pipenv lock --requirements > requirements.txt
+	pipenv lock --requirements --dev > requirements-dev.txt
+
+lock: Pipfile.lock
+
+build:
+	docker-compose run --rm build --target /var/task --no-deps .
+	docker-compose run --rm build --target /opt/python --requirement requirements.txt
+
+dist:
+	mkdir -p dist
+	docker-compose run --rm -T dist > dist/lambda.zip
+	docker-compose run --rm -T --workdir /opt dist > dist/layer.zip
+
+deploy:
+	docker-compose run --rm -T package | aws s3 cp - s3://my-bucket/path/to/prefix/lambda.zip
+	docker-compose run --rm -T --workdir /opt package | aws s3 cp - s3://my-bucket/path/to/prefix/layer.zip
+
+clean:
+	rm -rf dist
+	docker-compose down --volumes
 ```

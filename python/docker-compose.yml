@@ -8,8 +8,8 @@ services:
     volumes:
       - lambda:/var/task
       - layer:/opt/python
-      - ./:/tmp/build
-    working_dir: /tmp/build
+      - ./:/tmp
+    working_dir: /tmp
 
   # Package lambda/layer
   dist:
@@ -37,5 +37,5 @@ services:
       - ./:/var/task
 
 volumes:
-  layer:
   lambda:
+  layer:
