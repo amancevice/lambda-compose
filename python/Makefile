@@ -10,7 +10,7 @@ Pipfile.lock: Pipfile
 lock: Pipfile.lock
 
 build:
-	docker-compose run --rm build --target /var/task --no-deps .
+	docker-compose run --rm build --target /var/task --no-deps --upgrade .
 	docker-compose run --rm build --target /opt/python --requirement requirements.txt
 
 dist:

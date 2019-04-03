@@ -79,7 +79,7 @@ setup(
 
 ## Lock
 
-"Locking" in this context is the process of determining the full dependency graph of the project. How this is done is left to the user, but Pipenv is a solid (if controversial) choice.
+_Locking_ in this context is the process of determining the full dependency graph of the project. How this is done is left to the user, but Pipenv is a solid (if controversial) choice.
 
 Begin the process of locking by executing `pipenv lock` at the root of your project. This will create a virtual environment to compute the dependency tree and create two new files in your project:
 
@@ -116,7 +116,7 @@ requests = ">=2.21"
 python_version = "3.7"
 ```
 
-Run `pipenv lock` again to regenerate `Pipefile.lock`.
+Run `pipenv lock` again to regenerate `Pipfile.lock`.
 
 Once the lock is complete, generate the requirements files:
 
@@ -155,6 +155,8 @@ Pipfile.lock: Pipfile
 
 lock: Pipfile.lock
 ```
+
+Run `make lock` to lock your dependencies.
 
 ## Build
 
@@ -196,7 +198,9 @@ build:
 
 Run `make build` to install your application to the `lambda` and `layer` volumes.
 
-_Note: Splitting the application and layer in this manner is not required, but it's a handy way to separate your application logic from its core dependencies. Assuming your application codebase is small, updating your Lambda function becomes fairly trivial._
+_Note: Splitting the application and layer in this fashion is not required, but it's a handy way to separate your application logic from its core dependencies.
+
+Assuming your application codebase is small, updating your Lambda function becomes fairly trivial._
 
 ## Package
 
@@ -333,11 +337,12 @@ clean:
 
 Run `make clean` to remove any containers, networks, and volumes from your system.
 
-## Full Configuration
+# Full Configuration Examples
 
 A complete compose configuration for reference:
 
 ```yaml
+# ./docker-compose.yml
 version: '3'
 services:
 
@@ -384,6 +389,7 @@ volumes:
 A complete Makefile for reference:
 
 ```Makefile
+# ./Makefile
 .PHONY: lock build deploy
 
 Pipfile.lock: Pipfile
@@ -394,7 +400,7 @@ Pipfile.lock: Pipfile
 lock: Pipfile.lock
 
 build:
-	docker-compose run --rm build --target /var/task --no-deps .
+	docker-compose run --rm build --target /var/task --no-deps --upgrade .
 	docker-compose run --rm build --target /opt/python --requirement requirements.txt
 
 dist:
