@@ -390,7 +390,7 @@ A complete Makefile for reference:
 
 ```Makefile
 # ./Makefile
-.PHONY: lock build deploy
+.PHONY: lock build deploy clean
 
 Pipfile.lock: Pipfile
 	pipenv lock
@@ -409,8 +409,8 @@ dist:
 	docker-compose run --rm -T --workdir /opt dist > dist/layer.zip
 
 deploy:
-	docker-compose run --rm -T package | aws s3 cp - s3://my-bucket/path/to/prefix/lambda.zip
-	docker-compose run --rm -T --workdir /opt package | aws s3 cp - s3://my-bucket/path/to/prefix/layer.zip
+	docker-compose run --rm -T dist | aws s3 cp - s3://my-bucket/path/to/prefix/lambda.zip
+	docker-compose run --rm -T --workdir /opt dist | aws s3 cp - s3://my-bucket/path/to/prefix/layer.zip
 
 clean:
 	rm -rf dist
