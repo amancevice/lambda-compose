@@ -1,16 +1,16 @@
 -i https://pypi.org/simple
 appnope==0.1.0 ; sys_platform == 'darwin'
 backcall==0.1.0
-boto3==1.9.119
-botocore==1.12.119
+boto3==1.9.134
+botocore==1.12.134
 decorator==4.4.0
 docutils==0.14
 ipython-genutils==0.2.0
 ipython==7.4.0
 jedi==0.13.3
 jmespath==0.9.4
-parso==0.3.4
-pexpect==4.6.0 ; sys_platform != 'win32'
+parso==0.4.0
+pexpect==4.7.0 ; sys_platform != 'win32'
 pickleshare==0.7.5
 prompt-toolkit==2.0.9
 ptyprocess==0.6.0
@@ -19,5 +19,5 @@ python-dateutil==2.8.0
 s3transfer==0.2.0
 six==1.12.0
 traitlets==4.3.2
-urllib3==1.24.1
+urllib3==1.24.2
 wcwidth==0.1.7
